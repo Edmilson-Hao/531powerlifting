@@ -1,8 +1,7 @@
 /**
  * 5/3/1 Powerlifting Tracker - PWA Offline
  * CM = 90% do 1RM
- * Ciclos de 4 semanas
- * +5kg no 1RM após ciclo completo com sucesso
+ * Programas: 5/3/1 Clássico (4 sem) e Beyond 5/3/1 (7 sem)
  */
 
 (function () {
@@ -18,30 +17,88 @@
   // Levantamentos principais da divisão atual (sem OHP)
   const MAIN_LIFTS = LIFTS.filter(l => l.id !== 'ohp');
 
-  // Week templates: [ { reps, pct of CM }, ... ]
-  // Week 4 is deload
-  const WEEK_TEMPLATES = {
-    1: [
-      { reps: 5, pct: 0.65, amrap: false },
-      { reps: 5, pct: 0.75, amrap: false },
-      { reps: 5, pct: 0.85, amrap: true }
-    ],
-    2: [
-      { reps: 3, pct: 0.70, amrap: false },
-      { reps: 3, pct: 0.80, amrap: false },
-      { reps: 3, pct: 0.90, amrap: true }
-    ],
-    3: [
-      { reps: 1, pct: 0.75, amrap: false },
-      { reps: 1, pct: 0.85, amrap: false },
-      { reps: 1, pct: 0.95, amrap: true }
-    ],
-    4: [
-      { reps: 5, pct: 0.60, amrap: false },
-      { reps: 5, pct: 0.60, amrap: false },
-      { reps: 5, pct: 0.60, amrap: false }
-    ]
+  // Sets base (usados nos dois programas)
+  const SETS_5 = [
+    { reps: 5, pct: 0.65, amrap: false },
+    { reps: 5, pct: 0.75, amrap: false },
+    { reps: 5, pct: 0.85, amrap: true }
+  ];
+  const SETS_3 = [
+    { reps: 3, pct: 0.70, amrap: false },
+    { reps: 3, pct: 0.80, amrap: false },
+    { reps: 3, pct: 0.90, amrap: true }
+  ];
+  // Classic semana 3 (conforme programa original do app: 1/1/1+)
+  const SETS_531_CLASSIC = [
+    { reps: 1, pct: 0.75, amrap: false },
+    { reps: 1, pct: 0.85, amrap: false },
+    { reps: 1, pct: 0.95, amrap: true }
+  ];
+  // Beyond / Wendler semana 5/3/1: 5, 3, 1+
+  const SETS_531 = [
+    { reps: 5, pct: 0.75, amrap: false },
+    { reps: 3, pct: 0.85, amrap: false },
+    { reps: 1, pct: 0.95, amrap: true }
+  ];
+  const SETS_DELOAD_CLASSIC = [
+    { reps: 5, pct: 0.60, amrap: false },
+    { reps: 5, pct: 0.60, amrap: false },
+    { reps: 5, pct: 0.60, amrap: false }
+  ];
+  const SETS_DELOAD_BEYOND = [
+    { reps: 5, pct: 0.60, amrap: false },
+    { reps: 5, pct: 0.60, amrap: false },
+    { reps: 5, pct: 0.60, amrap: false }
+  ];
+
+  /**
+   * classic: 4 semanas, deload na 4, +5 kg no 1RM ao fim
+   * beyond: 7 semanas (2 ondas sem deload no meio + deload na 7)
+   *   após semana 3: +2 kg (superior) / +4 kg (inferior) e segue
+   *   após semana 7: +2/+4 e novo ciclo
+   */
+  const PROGRAMS = {
+    classic: {
+      id: 'classic',
+      name: '5/3/1 Clássico',
+      shortName: '5/3/1',
+      maxWeek: 4,
+      weeks: {
+        1: { sets: SETS_5, label: 'Séries de 5', joker: true, jokerReps: 5 },
+        2: { sets: SETS_3, label: 'Séries de 3', joker: true, jokerReps: 3 },
+        3: { sets: SETS_531_CLASSIC, label: '5/3/1', joker: true, jokerReps: 1 },
+        4: { sets: SETS_DELOAD_CLASSIC, label: 'Deload', joker: false }
+      }
+    },
+    beyond: {
+      id: 'beyond',
+      name: 'Beyond 5/3/1',
+      shortName: 'Beyond',
+      maxWeek: 7,
+      weeks: {
+        1: { sets: SETS_5, label: 'Séries de 5', joker: true, jokerReps: 5 },
+        2: { sets: SETS_3, label: 'Séries de 3', joker: true, jokerReps: 3 },
+        3: { sets: SETS_531, label: '5/3/1', joker: true, jokerReps: 1 },
+        4: { sets: SETS_5, label: 'Séries de 5', joker: true, jokerReps: 5 },
+        5: { sets: SETS_3, label: 'Séries de 3', joker: true, jokerReps: 3 },
+        6: { sets: SETS_531, label: '5/3/1', joker: true, jokerReps: 1 },
+        7: { sets: SETS_DELOAD_BEYOND, label: 'Deload', joker: false }
+      }
+    }
   };
+
+  function getProgram() {
+    return PROGRAMS[state.programMode] || PROGRAMS.classic;
+  }
+
+  function isLowerLift(liftId) {
+    return liftId === 'squat' || liftId === 'deadlift';
+  }
+
+  function tmIncrement(liftId) {
+    // Beyond: +4 kg inferior, +2 kg superior
+    return isLowerLift(liftId) ? 4 : 2;
+  }
 
   /**
    * Divisão semanal personalizada 5/3/1
@@ -102,6 +159,7 @@
   const STORAGE_KEY = 'pl531_data_v1';
   const DEFAULT_STATE = {
     setupComplete: false,
+    programMode: 'classic', // 'classic' | 'beyond'
     lifts: {
       squat: { oneRM: 0 },
       bench: { oneRM: 0 },
@@ -143,7 +201,8 @@
         ...parsed,
         lifts: { ...DEFAULT_STATE.lifts, ...(parsed.lifts || {}) },
         progress: { ...DEFAULT_STATE.progress, ...(parsed.progress || {}) },
-        histFilter: { ...DEFAULT_STATE.histFilter, ...(parsed.histFilter || {}) }
+        histFilter: { ...DEFAULT_STATE.histFilter, ...(parsed.histFilter || {}) },
+        programMode: parsed.programMode === 'beyond' ? 'beyond' : 'classic'
       };
     } catch (e) {
       console.error('Erro ao carregar estado:', e);
@@ -183,8 +242,22 @@
     return state.progress[liftId] || { week: 1, cycle: 1 };
   }
 
+  function getWeekConfig(week) {
+    const prog = getProgram();
+    return prog.weeks[week] || prog.weeks[1];
+  }
+
   function getSetsForWeek(week) {
-    return WEEK_TEMPLATES[week] || WEEK_TEMPLATES[1];
+    return getWeekConfig(week).sets;
+  }
+
+  function getMaxWeek() {
+    return getProgram().maxWeek;
+  }
+
+  function weekRange() {
+    const n = getMaxWeek();
+    return Array.from({ length: n }, (_, i) => i + 1);
   }
 
   function nextTrainingDayLabel() {
@@ -360,7 +433,7 @@
                 <div class="lift-1rm">1RM: ${formatWeight(l1rm)} kg</div>
                 <div class="lift-cm">CM: ${formatWeight(lcm)} kg</div>
                 <div class="lift-mini-bar">
-                  ${[1,2,3,4].map(w => `<span class="${w < lp.week ? 'done' : ''} ${w === lp.week ? 'current' : ''}"></span>`).join('')}
+                  ${weekRange().map(w => `<span class="${w < lp.week ? 'done' : ''} ${w === lp.week ? 'current' : ''}"></span>`).join('')}
                 </div>
               </div>
             `;
@@ -403,20 +476,20 @@
       <div class="card">
         <div class="session-header">
           <div>
-            <span class="week-badge">Ciclo ${prog.cycle} · Semana ${viewWeek}</span>
+            <span class="week-badge">${getProgram().shortName} · Ciclo ${prog.cycle} · S${viewWeek}</span>
             <h2>${lift.name}</h2>
-            <div class="subtitle">1RM: ${formatWeight(oneRM)} kg · CM: ${formatWeight(cm)} kg</div>
+            <div class="subtitle">1RM: ${formatWeight(oneRM)} kg · CM: ${formatWeight(cm)} kg · ${getWeekConfig(viewWeek).label}</div>
           </div>
         </div>
 
         <div class="cycle-progress">
-          ${[1,2,3,4].map(w => `
+          ${weekRange().map(w => `
             <div class="cycle-dot ${w < prog.week ? 'done' : ''} ${w === prog.week ? 'current' : ''}"></div>
           `).join('')}
         </div>
 
         <div class="week-preview" id="weekPreview">
-          ${[1,2,3,4].map(w => `
+          ${weekRange().map(w => `
             <div class="week-chip ${w === viewWeek ? 'active' : ''}" data-week="${w}">
               <div class="w-label">${w === prog.week ? 'Atual' : (w < prog.week ? 'Passada' : 'Futura')}</div>
               <div class="w-num">S${w}</div>
@@ -430,7 +503,7 @@
           <strong>Aquecimento:</strong> Faça 2–4 séries leves progressivas antes das séries de trabalho (ex: barra, 40%, 50%, 60%).
         </div>
 
-        <div class="card-title">Séries de Trabalho</div>
+        <div class="card-title">Séries de Trabalho · ${getWeekConfig(viewWeek).label}</div>
         <ul class="set-list">
           ${sets.map((s, i) => {
             const weight = calcWeight(cm, s.pct);
@@ -447,6 +520,60 @@
             `;
           }).join('')}
         </ul>
+
+        ${(() => {
+          const wc = getWeekConfig(viewWeek);
+          if (wc.joker) {
+            const amrapSet = [...sets].reverse().find(s => s.amrap) || sets[sets.length - 1];
+            const base = calcWeight(cm, amrapSet.pct);
+            const joker5 = Math.round((base * 1.05) / 2.5) * 2.5;
+            const joker10 = Math.round((base * 1.10) / 2.5) * 2.5;
+            return `
+          <div class="joker-note" id="jokerPanel"
+               data-base="${base}" data-j5="${joker5}" data-j10="${joker10}" data-reps="${wc.jokerReps}">
+            <strong>Joker Set (opcional):</strong> Se a AMRAP (+) saiu limpa, registre o que fez.
+            <div class="joker-loads">
+              <span class="joker-load">+5% → <strong>${formatWeight(joker5)} kg</strong></span>
+              <span class="joker-load">+10% → <strong>${formatWeight(joker10)} kg</strong></span>
+            </div>
+            ${isCurrent ? `
+            <div class="joker-picker">
+              <div class="joker-picker-label">Quantas séries?</div>
+              <div class="filter-row" id="jokerCountRow">
+                <button type="button" class="filter-chip active" data-joker-count="0">Nenhuma</button>
+                <button type="button" class="filter-chip" data-joker-count="1">1 série</button>
+                <button type="button" class="filter-chip" data-joker-count="2">2 séries</button>
+              </div>
+              <div id="jokerSlots" class="hidden">
+                <div class="joker-slot" data-slot="1">
+                  <div class="joker-picker-label">1ª Joker</div>
+                  <div class="filter-row">
+                    <button type="button" class="filter-chip active" data-joker-pct="5" data-slot="1">+5% (${formatWeight(joker5)} kg)</button>
+                    <button type="button" class="filter-chip" data-joker-pct="10" data-slot="1">+10% (${formatWeight(joker10)} kg)</button>
+                  </div>
+                </div>
+                <div class="joker-slot hidden" data-slot="2">
+                  <div class="joker-picker-label">2ª Joker</div>
+                  <div class="filter-row">
+                    <button type="button" class="filter-chip active" data-joker-pct="5" data-slot="2">+5% (${formatWeight(joker5)} kg)</button>
+                    <button type="button" class="filter-chip" data-joker-pct="10" data-slot="2">+10% (${formatWeight(joker10)} kg)</button>
+                  </div>
+                </div>
+              </div>
+              <div class="joker-summary text-muted" id="jokerSummary" style="font-size:0.8rem;margin-top:8px">Sem Joker Set</div>
+            </div>
+            ` : ''}
+            <span class="joker-hint">Base AMRAP: ${formatWeight(base)} kg · Se sofreu na obrigatória, não faça Joker.</span>
+          </div>`;
+          }
+          if (wc.label === 'Deload') {
+            return `
+          <div class="joker-note deload">
+            <strong>Deload:</strong> séries leves — foque em técnica e recuperação. Não force carga.
+          </div>`;
+          }
+          return '';
+        })()}
 
         ${isCurrent ? `
           <div class="btn-group mt-16">
@@ -515,13 +642,87 @@
       });
     });
 
+    // Joker picker interactions
+    const jokerPanel = document.getElementById('jokerPanel');
+    if (jokerPanel) {
+      const slotsEl = document.getElementById('jokerSlots');
+      const summaryEl = document.getElementById('jokerSummary');
+      const j5 = parseFloat(jokerPanel.dataset.j5);
+      const j10 = parseFloat(jokerPanel.dataset.j10);
+      const jReps = parseInt(jokerPanel.dataset.reps, 10) || 5;
+
+      function updateJokerUI() {
+        const countBtn = jokerPanel.querySelector('[data-joker-count].active');
+        const count = countBtn ? parseInt(countBtn.dataset.jokerCount, 10) : 0;
+        if (slotsEl) {
+          slotsEl.classList.toggle('hidden', count === 0);
+          const slot2 = slotsEl.querySelector('.joker-slot[data-slot="2"]');
+          if (slot2) slot2.classList.toggle('hidden', count < 2);
+        }
+        if (summaryEl) {
+          if (count === 0) {
+            summaryEl.textContent = 'Sem Joker Set';
+          } else {
+            const parts = [];
+            for (let i = 1; i <= count; i++) {
+              const pctBtn = jokerPanel.querySelector(`[data-joker-pct].active[data-slot="${i}"]`);
+              const pct = pctBtn ? parseInt(pctBtn.dataset.jokerPct, 10) : 5;
+              const w = pct === 10 ? j10 : j5;
+              parts.push(`${i}ª: +${pct}% (${formatWeight(w)} kg × ${jReps})`);
+            }
+            summaryEl.textContent = parts.join(' · ');
+          }
+        }
+      }
+
+      jokerPanel.querySelectorAll('[data-joker-count]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          jokerPanel.querySelectorAll('[data-joker-count]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          updateJokerUI();
+        });
+      });
+      jokerPanel.querySelectorAll('[data-joker-pct]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const slot = btn.dataset.slot;
+          jokerPanel.querySelectorAll(`[data-joker-pct][data-slot="${slot}"]`).forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          updateJokerUI();
+        });
+      });
+      updateJokerUI();
+    }
+
+    function readJokerSelection() {
+      const panel = document.getElementById('jokerPanel');
+      if (!panel) return null;
+      const countBtn = panel.querySelector('[data-joker-count].active');
+      const count = countBtn ? parseInt(countBtn.dataset.jokerCount, 10) : 0;
+      if (!count) return null;
+      const j5 = parseFloat(panel.dataset.j5);
+      const j10 = parseFloat(panel.dataset.j10);
+      const jReps = parseInt(panel.dataset.reps, 10) || 5;
+      const jokerSets = [];
+      for (let i = 1; i <= count; i++) {
+        const pctBtn = panel.querySelector(`[data-joker-pct].active[data-slot="${i}"]`);
+        const pct = pctBtn ? parseInt(pctBtn.dataset.jokerPct, 10) : 5;
+        jokerSets.push({
+          order: i,
+          boostPct: pct,
+          weight: pct === 10 ? j10 : j5,
+          reps: jReps
+        });
+      }
+      return { count, sets: jokerSets };
+    }
+
     const btnSuccess = document.getElementById('btnSuccess');
     if (btnSuccess) {
-      btnSuccess.addEventListener('click', () => handleResult(true));
+      btnSuccess.addEventListener('click', () => handleResult(true, readJokerSelection()));
     }
     const btnFail = document.getElementById('btnFail');
     if (btnFail) {
-      btnFail.addEventListener('click', () => handleResult(false));
+      btnFail.addEventListener('click', () => handleResult(false, readJokerSelection()));
     }
     const btnBack = document.getElementById('btnBackCurrent');
     if (btnBack) {
@@ -543,7 +744,7 @@
     }
   }
 
-  function handleResult(success) {
+  function handleResult(success, jokerSelection) {
     const liftId = state.activeLift;
     const lift = getLift(liftId);
     const prog = getCurrentProgress(liftId);
@@ -551,8 +752,9 @@
     const cm = calcCM(oneRM);
     const sets = getSetsForWeek(prog.week);
     const weights = sets.map(s => calcWeight(cm, s.pct));
+    const mode = state.programMode || 'classic';
+    const maxW = getMaxWeek();
 
-    // Log entry
     const entry = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       date: new Date().toISOString(),
@@ -562,28 +764,54 @@
       week: prog.week,
       oneRM,
       cm,
+      programMode: mode,
       sets: sets.map((s, i) => ({
         reps: s.reps,
         pct: s.pct,
         weight: weights[i],
         amrap: s.amrap
       })),
+      joker: jokerSelection || null,
       success
     };
     state.log.unshift(entry);
 
     if (success) {
-      if (prog.week < 4) {
-        // Advance week
-        state.progress[liftId].week = prog.week + 1;
-        showToast(`Semana ${prog.week} concluída! → Semana ${prog.week + 1}`);
+      if (mode === 'beyond') {
+        if (prog.week === 3) {
+          // Fim da 1ª onda: sobe TM e segue para semana 4 (sem deload)
+          const inc = tmIncrement(liftId);
+          const new1RM = Math.round((oneRM + inc) * 10) / 10;
+          state.lifts[liftId].oneRM = new1RM;
+          state.progress[liftId].week = 4;
+          showToast(`Onda 1 ok! TM +${inc} kg → ${formatWeight(new1RM)} kg · Semana 4`);
+        } else if (prog.week === 6) {
+          state.progress[liftId].week = 7;
+          showToast('Semana 6 ok! → Semana 7 Deload (obrigatório)');
+        } else if (prog.week >= maxW) {
+          // Fim do bloco Beyond: +TM e novo ciclo
+          const inc = tmIncrement(liftId);
+          const new1RM = Math.round((oneRM + inc) * 10) / 10;
+          state.lifts[liftId].oneRM = new1RM;
+          state.progress[liftId].week = 1;
+          state.progress[liftId].cycle = prog.cycle + 1;
+          showToast(`Bloco Beyond completo! TM +${inc} kg → ${formatWeight(new1RM)} kg`);
+        } else {
+          state.progress[liftId].week = prog.week + 1;
+          showToast(`Semana ${prog.week} concluída! → Semana ${prog.week + 1}`);
+        }
       } else {
-        // End of cycle → +5kg e reinicia
-        const new1RM = Math.round((oneRM + 5) * 10) / 10;
-        state.lifts[liftId].oneRM = new1RM;
-        state.progress[liftId].week = 1;
-        state.progress[liftId].cycle = prog.cycle + 1;
-        showToast(`Ciclo ${prog.cycle} completo! 1RM agora ${formatWeight(new1RM)} kg`);
+        // Classic 5/3/1
+        if (prog.week < maxW) {
+          state.progress[liftId].week = prog.week + 1;
+          showToast(`Semana ${prog.week} concluída! → Semana ${prog.week + 1}`);
+        } else {
+          const new1RM = Math.round((oneRM + 5) * 10) / 10;
+          state.lifts[liftId].oneRM = new1RM;
+          state.progress[liftId].week = 1;
+          state.progress[liftId].cycle = prog.cycle + 1;
+          showToast(`Ciclo ${prog.cycle} completo! 1RM agora ${formatWeight(new1RM)} kg`);
+        }
       }
     } else {
       showToast(`Semana ${prog.week} marcada como falha. Repita o treino.`);
@@ -609,7 +837,7 @@
               <div class="flex justify-between items-center">
                 <div>
                   <div class="log-title">${l.name}</div>
-                  <div class="text-muted" style="font-size:0.8rem">Ciclo ${prog.cycle} · Semana ${prog.week}/4</div>
+                  <div class="text-muted" style="font-size:0.8rem">Ciclo ${prog.cycle} · Semana ${prog.week}/${getMaxWeek()} · ${getProgram().shortName}</div>
                 </div>
                 <div class="text-right">
                   <div class="fw-bold text-accent">${formatWeight(oneRM)} kg</div>
@@ -617,7 +845,7 @@
                 </div>
               </div>
               <div class="cycle-progress mt-8">
-                ${[1,2,3,4].map(w => `
+                ${weekRange().map(w => `
                   <div class="cycle-dot ${w < prog.week ? 'done' : ''} ${w === prog.week ? 'current' : ''}"></div>
                 `).join('')}
               </div>
@@ -883,6 +1111,10 @@
         <div class="text-muted" style="font-size:0.75rem;margin-top:2px">
           ${(entry.sets || []).map(s => `${formatWeight(s.weight)}kg × ${s.amrap ? 'AMRAP' : s.reps}`).join(' · ')}
         </div>
+        ${entry.joker && entry.joker.sets && entry.joker.sets.length ? `
+        <div class="log-joker">
+          Joker: ${entry.joker.sets.map(j => `+${j.boostPct}% ${formatWeight(j.weight)}kg×${j.reps}`).join(' → ')}
+        </div>` : ''}
       </div>
     `;
   }
@@ -890,7 +1122,22 @@
   // ----- CONFIG TAB -----
   function renderConfig() {
     const container = document.getElementById('panel-config');
+    const mode = state.programMode || 'classic';
     container.innerHTML = `
+      <div class="card">
+        <div class="card-title">Periodização</div>
+        <p class="text-muted mb-12" style="font-size:0.85rem">Escolha o modelo de progressão. Ao trocar, as semanas atuais são mantidas (ajuste manualmente se precisar).</p>
+        <div class="filter-row">
+          <button class="filter-chip ${mode === 'classic' ? 'active' : ''}" data-program="classic">5/3/1 Clássico</button>
+          <button class="filter-chip ${mode === 'beyond' ? 'active' : ''}" data-program="beyond">Beyond 5/3/1</button>
+        </div>
+        <p class="text-muted mt-12" style="font-size:0.8rem">
+          ${mode === 'beyond'
+            ? 'Beyond: 6 semanas pesadas + deload na 7ª (3×5 @ 60% CM). Após a semana 3: +2 kg (supino) / +4 kg (agachamento e terra). Joker Sets opcionais.'
+            : 'Clássico: 3 semanas pesadas + deload na 4ª. Ao fim do ciclo: +5 kg no 1RM.'}
+        </p>
+      </div>
+
       <div class="card">
         <div class="card-title">1RM Atual (editar)</div>
         <p class="text-muted mb-16" style="font-size:0.85rem">
@@ -945,6 +1192,23 @@
       </div>
     `;
 
+    container.querySelectorAll('[data-program]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const next = btn.dataset.program;
+        if (next === state.programMode) return;
+        if (!confirm('Trocar periodização para ' + (next === 'beyond' ? 'Beyond 5/3/1' : '5/3/1 Clássico') + '?')) return;
+        state.programMode = next;
+        // Clamp weeks to new max
+        const maxW = getMaxWeek();
+        MAIN_LIFTS.forEach(l => {
+          if (state.progress[l.id].week > maxW) state.progress[l.id].week = maxW;
+        });
+        saveState();
+        showToast(next === 'beyond' ? 'Beyond 5/3/1 ativo' : '5/3/1 Clássico ativo');
+        renderConfig();
+      });
+    });
+
     document.getElementById('btnSave1RM')?.addEventListener('click', () => {
       document.querySelectorAll('.config-1rm').forEach(inp => {
         const id = inp.dataset.lift;
@@ -964,11 +1228,13 @@
         const action = btn.dataset.action;
         const prog = state.progress[id];
         if (action === 'next') {
-          if (prog.week < 4) prog.week++;
+          const maxW = getMaxWeek();
+          if (prog.week < maxW) prog.week++;
           else {
             prog.week = 1;
             prog.cycle++;
-            state.lifts[id].oneRM = Math.round((state.lifts[id].oneRM + 5) * 10) / 10;
+            const inc = (state.programMode === 'beyond') ? tmIncrement(id) : 5;
+            state.lifts[id].oneRM = Math.round((state.lifts[id].oneRM + inc) * 10) / 10;
           }
         } else if (action === 'prev') {
           if (prog.week > 1) prog.week--;
@@ -1105,6 +1371,15 @@
   // ========== SETUP ==========
   function initSetup() {
     const form = document.getElementById('setupForm');
+    // Toggle visual dos chips de periodização
+    form.querySelectorAll('input[name="setup-program"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        form.querySelectorAll('input[name="setup-program"]').forEach(r => {
+          r.closest('label').classList.toggle('active', r.checked);
+        });
+      });
+    });
+
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       let valid = true;
@@ -1123,6 +1398,8 @@
         showToast('Preencha todos os 1RMs com valores válidos');
         return;
       }
+      const progRadio = form.querySelector('input[name="setup-program"]:checked');
+      state.programMode = progRadio && progRadio.value === 'beyond' ? 'beyond' : 'classic';
       state.setupComplete = true;
       state.progress = {
         squat: { week: 1, cycle: 1 },
@@ -1132,7 +1409,7 @@
       };
       state.log = [];
       saveState();
-      showToast('Programa iniciado!');
+      showToast(state.programMode === 'beyond' ? 'Beyond 5/3/1 iniciado!' : '5/3/1 Clássico iniciado!');
       render();
     });
   }

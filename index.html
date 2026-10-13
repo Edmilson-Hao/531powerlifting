@@ -43,12 +43,24 @@
       <div class="card">
         <h2 style="margin-bottom:8px">Bem-vindo</h2>
         <p class="text-muted" style="font-size:0.9rem;margin-bottom:20px">
-          Informe seu <strong>1RM</strong> (uma repetição máxima) para cada levantamento.
-          O sistema calculará automaticamente a <strong>Carga Máxima (CM = 90% do 1RM)</strong>
-          e montará o programa 5/3/1 de 4 semanas.
+          Informe seu <strong>1RM</strong> e escolha a periodização.
+          A <strong>CM = 90% do 1RM</strong> é calculada automaticamente.
         </p>
 
         <form id="setupForm">
+          <div class="form-group">
+            <label>Periodização</label>
+            <div class="filter-row" style="margin-top:6px">
+              <label class="filter-chip active" style="cursor:pointer">
+                <input type="radio" name="setup-program" value="classic" checked style="display:none">
+                5/3/1 Clássico
+              </label>
+              <label class="filter-chip" style="cursor:pointer">
+                <input type="radio" name="setup-program" value="beyond" style="display:none">
+                Beyond 5/3/1
+              </label>
+            </div>
+          </div>
           <div class="form-group">
             <label for="setup-squat">Squat (1RM)</label>
             <div class="input-suffix">
@@ -77,12 +89,11 @@
       <div class="card">
         <div class="card-title">Como funciona</div>
         <ul style="font-size:0.85rem;color:var(--text-muted);padding-left:18px;line-height:1.7">
-          <li>Divisão 4 dias com exercícios e assistência</li>
-          <li>Ciclos de 4 semanas por levantamento</li>
-          <li>Semanas 1–3: progressão 5/3/1 + AMRAP</li>
-          <li>Semana 4: deload (3×5 @ 60% CM)</li>
+          <li><strong>5/3/1 Clássico:</strong> 3 semanas pesadas + deload · +5 kg ao fim</li>
+          <li><strong>Beyond 5/3/1:</strong> 6 semanas pesadas + deload na 7ª · +2/+4 kg após a 3ª e ao fim</li>
+          <li>Joker Sets opcionais se a série + sair limpa</li>
           <li>Sucesso → avança; Falha → repete a semana</li>
-          <li>Ao terminar o ciclo: +5 kg no 1RM</li>
+          <li>Divisão semanal na aba Divisão</li>
         </ul>
       </div>
     </div>

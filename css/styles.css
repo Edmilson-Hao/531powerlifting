@@ -913,3 +913,76 @@ body {
 @media (min-width: 400px) {
   .main-content { padding: 20px; }
 }
+
+
+/* Joker / deload notes */
+.joker-note {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.joker-note strong { color: var(--accent); }
+.joker-note.deload {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.joker-note.deload strong { color: var(--success); }
+.joker-loads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.joker-load {
+  background: var(--bg);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.joker-load strong {
+  color: var(--accent);
+  font-size: 1rem;
+}
+.joker-hint {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.9;
+}
+
+.week-preview {
+  flex-wrap: nowrap;
+}
+.week-chip {
+  min-width: 64px;
+}
+
+
+.joker-picker {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(245, 158, 11, 0.25);
+}
+.joker-picker-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 8px 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.joker-slot {
+  margin-top: 4px;
+}
+.log-joker {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+}
