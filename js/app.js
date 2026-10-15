@@ -17,7 +17,7 @@
   // Levantamentos principais da divisão atual (sem OHP)
   const MAIN_LIFTS = LIFTS.filter(l => l.id !== 'ohp');
 
-  // Sets base (usados nos dois programas)
+  // Classic: última série é AMRAP (+)
   const SETS_5 = [
     { reps: 5, pct: 0.65, amrap: false },
     { reps: 5, pct: 0.75, amrap: false },
@@ -28,17 +28,26 @@
     { reps: 3, pct: 0.80, amrap: false },
     { reps: 3, pct: 0.90, amrap: true }
   ];
-  // Classic semana 3 (conforme programa original do app: 1/1/1+)
   const SETS_531_CLASSIC = [
     { reps: 1, pct: 0.75, amrap: false },
     { reps: 1, pct: 0.85, amrap: false },
     { reps: 1, pct: 0.95, amrap: true }
   ];
-  // Beyond / Wendler semana 5/3/1: 5, 3, 1+
-  const SETS_531 = [
+  // Beyond: 3ª série fixa (sem +) — Joker é opcional depois
+  const SETS_5_BEYOND = [
+    { reps: 5, pct: 0.65, amrap: false },
+    { reps: 5, pct: 0.75, amrap: false },
+    { reps: 5, pct: 0.85, amrap: false }
+  ];
+  const SETS_3_BEYOND = [
+    { reps: 3, pct: 0.70, amrap: false },
+    { reps: 3, pct: 0.80, amrap: false },
+    { reps: 3, pct: 0.90, amrap: false }
+  ];
+  const SETS_531_BEYOND = [
     { reps: 5, pct: 0.75, amrap: false },
     { reps: 3, pct: 0.85, amrap: false },
-    { reps: 1, pct: 0.95, amrap: true }
+    { reps: 1, pct: 0.95, amrap: false }
   ];
   const SETS_DELOAD_CLASSIC = [
     { reps: 5, pct: 0.60, amrap: false },
@@ -76,12 +85,12 @@
       shortName: 'Beyond',
       maxWeek: 7,
       weeks: {
-        1: { sets: SETS_5, label: 'Séries de 5', joker: true, jokerReps: 5 },
-        2: { sets: SETS_3, label: 'Séries de 3', joker: true, jokerReps: 3 },
-        3: { sets: SETS_531, label: '5/3/1', joker: true, jokerReps: 1 },
-        4: { sets: SETS_5, label: 'Séries de 5', joker: true, jokerReps: 5 },
-        5: { sets: SETS_3, label: 'Séries de 3', joker: true, jokerReps: 3 },
-        6: { sets: SETS_531, label: '5/3/1', joker: true, jokerReps: 1 },
+        1: { sets: SETS_5_BEYOND, label: 'Séries de 5', joker: true, jokerReps: 5 },
+        2: { sets: SETS_3_BEYOND, label: 'Séries de 3', joker: true, jokerReps: 3 },
+        3: { sets: SETS_531_BEYOND, label: '5/3/1', joker: true, jokerReps: 1 },
+        4: { sets: SETS_5_BEYOND, label: 'Séries de 5', joker: true, jokerReps: 5 },
+        5: { sets: SETS_3_BEYOND, label: 'Séries de 3', joker: true, jokerReps: 3 },
+        6: { sets: SETS_531_BEYOND, label: '5/3/1', joker: true, jokerReps: 1 },
         7: { sets: SETS_DELOAD_BEYOND, label: 'Deload', joker: false }
       }
     }
@@ -160,6 +169,10 @@
   const DEFAULT_STATE = {
     setupComplete: false,
     programMode: 'classic', // 'classic' | 'beyond'
+    equipment: {
+      bar: 20,
+      plates: [20, 15, 10, 5, 2.5, 1]
+    },
     lifts: {
       squat: { oneRM: 0 },
       bench: { oneRM: 0 },
@@ -202,7 +215,13 @@
         lifts: { ...DEFAULT_STATE.lifts, ...(parsed.lifts || {}) },
         progress: { ...DEFAULT_STATE.progress, ...(parsed.progress || {}) },
         histFilter: { ...DEFAULT_STATE.histFilter, ...(parsed.histFilter || {}) },
-        programMode: parsed.programMode === 'beyond' ? 'beyond' : 'classic'
+        programMode: parsed.programMode === 'beyond' ? 'beyond' : 'classic',
+        equipment: {
+          bar: (parsed.equipment && parsed.equipment.bar > 0) ? parsed.equipment.bar : 20,
+          plates: (parsed.equipment && Array.isArray(parsed.equipment.plates) && parsed.equipment.plates.length)
+            ? parsed.equipment.plates
+            : [20, 15, 10, 5, 2.5, 1]
+        }
       };
     } catch (e) {
       console.error('Erro ao carregar estado:', e);
@@ -231,7 +250,53 @@
   }
 
   function formatWeight(w) {
-    return Number.isInteger(w) ? w : w.toFixed(1);
+    if (Number.isInteger(w)) return String(w);
+    // preserva 1.25, 2.5 etc. sem arredondar para 1.3
+    return String(Math.round(w * 100) / 100);
+  }
+
+  function getEquipment() {
+    const eq = state.equipment || { bar: 20, plates: [20, 15, 10, 5, 2.5, 1] };
+    return {
+      bar: eq.bar > 0 ? eq.bar : 20,
+      plates: (eq.plates && eq.plates.length) ? [...eq.plates].sort((a, b) => b - a) : [20, 15, 10, 5, 2.5, 1]
+    };
+  }
+
+  /** Montagem por lado (descontando a barra) */
+  function platesPerSide(totalKg) {
+    const { bar, plates } = getEquipment();
+    let side = (totalKg - bar) / 2;
+    if (side < -0.05) {
+      return { text: 'abaixo da barra', detail: '', side: 0 };
+    }
+    if (side < 0.05) {
+      return { text: 'só a barra', detail: formatWeight(bar) + ' kg', side: 0 };
+    }
+    let remaining = Math.round(side * 100) / 100;
+    const used = [];
+    for (const p of plates) {
+      while (remaining >= p - 0.001) {
+        used.push(p);
+        remaining = Math.round((remaining - p) * 100) / 100;
+      }
+    }
+    const text = used.length
+      ? used.map(formatWeight).join(' + ')
+      : '—';
+    const note = remaining > 0.05 ? ` (falta ~${formatWeight(remaining)} kg/lado)` : '';
+    return {
+      text: text + note,
+      detail: formatWeight(side) + ' kg/lado',
+      side
+    };
+  }
+
+  function formatPlatesLine(totalKg) {
+    const p = platesPerSide(totalKg);
+    if (p.side <= 0 && p.text === 'só a barra') return 'cada lado: só a barra';
+    if (p.side <= 0) return p.text;
+    return `cada lado: ${p.text}`;
   }
 
   function getLift(id) {
@@ -462,6 +527,7 @@
                 <div class="set-info">
                   <div class="reps">${l.name}</div>
                   <div class="pct">80% CM${one > 0 ? ' · CM ' + formatWeight(c) + ' kg' : ''}</div>
+                  ${one > 0 ? `<div class="plates-hint">${formatPlatesLine(w)}</div>` : ''}
                 </div>
                 <div class="set-weight">${one > 0 ? formatWeight(w) : '—'} <small>kg</small></div>
               </li>`;
@@ -508,12 +574,14 @@
           ${sets.map((s, i) => {
             const weight = calcWeight(cm, s.pct);
             const pctLabel = Math.round(s.pct * 100);
+            const platesLine = formatPlatesLine(weight);
             return `
               <li class="set-item">
                 <div class="set-num ${s.amrap ? 'amrap' : ''}">${i + 1}</div>
                 <div class="set-info">
                   <div class="reps">${s.amrap ? `AMRAP × ${s.reps}+` : `${s.reps} reps`}</div>
                   <div class="pct">${pctLabel}% CM</div>
+                  <div class="plates-hint">${platesLine}</div>
                 </div>
                 <div class="set-weight">${formatWeight(weight)} <small>kg</small></div>
               </li>
@@ -524,17 +592,17 @@
         ${(() => {
           const wc = getWeekConfig(viewWeek);
           if (wc.joker) {
-            const amrapSet = [...sets].reverse().find(s => s.amrap) || sets[sets.length - 1];
-            const base = calcWeight(cm, amrapSet.pct);
+            const topSet = [...sets].reverse().find(s => s.amrap) || sets[sets.length - 1];
+            const base = calcWeight(cm, topSet.pct);
             const joker5 = Math.round((base * 1.05) / 2.5) * 2.5;
             const joker10 = Math.round((base * 1.10) / 2.5) * 2.5;
             return `
           <div class="joker-note" id="jokerPanel"
                data-base="${base}" data-j5="${joker5}" data-j10="${joker10}" data-reps="${wc.jokerReps}">
-            <strong>Joker Set (opcional):</strong> Se a AMRAP (+) saiu limpa, registre o que fez.
+            <strong>Joker Set (opcional):</strong> Se a 3ª série saiu rápida e limpa, registre o Joker.
             <div class="joker-loads">
-              <span class="joker-load">+5% → <strong>${formatWeight(joker5)} kg</strong></span>
-              <span class="joker-load">+10% → <strong>${formatWeight(joker10)} kg</strong></span>
+              <span class="joker-load">+5% → <strong>${formatWeight(joker5)} kg</strong><small class="plates-hint">${formatPlatesLine(joker5)}</small></span>
+              <span class="joker-load">+10% → <strong>${formatWeight(joker10)} kg</strong><small class="plates-hint">${formatPlatesLine(joker10)}</small></span>
             </div>
             ${isCurrent ? `
             <div class="joker-picker">
@@ -548,22 +616,24 @@
                 <div class="joker-slot" data-slot="1">
                   <div class="joker-picker-label">1ª Joker</div>
                   <div class="filter-row">
-                    <button type="button" class="filter-chip active" data-joker-pct="5" data-slot="1">+5% (${formatWeight(joker5)} kg)</button>
-                    <button type="button" class="filter-chip" data-joker-pct="10" data-slot="1">+10% (${formatWeight(joker10)} kg)</button>
+                    <button type="button" class="filter-chip active" data-joker-pct="5" data-slot="1">+5% · ${formatWeight(joker5)} kg</button>
+                    <button type="button" class="filter-chip" data-joker-pct="10" data-slot="1">+10% · ${formatWeight(joker10)} kg</button>
                   </div>
+                  <div class="plates-hint" id="jokerPlate1">${formatPlatesLine(joker5)}</div>
                 </div>
                 <div class="joker-slot hidden" data-slot="2">
                   <div class="joker-picker-label">2ª Joker</div>
                   <div class="filter-row">
-                    <button type="button" class="filter-chip active" data-joker-pct="5" data-slot="2">+5% (${formatWeight(joker5)} kg)</button>
-                    <button type="button" class="filter-chip" data-joker-pct="10" data-slot="2">+10% (${formatWeight(joker10)} kg)</button>
+                    <button type="button" class="filter-chip active" data-joker-pct="5" data-slot="2">+5% · ${formatWeight(joker5)} kg</button>
+                    <button type="button" class="filter-chip" data-joker-pct="10" data-slot="2">+10% · ${formatWeight(joker10)} kg</button>
                   </div>
+                  <div class="plates-hint" id="jokerPlate2">${formatPlatesLine(joker5)}</div>
                 </div>
               </div>
               <div class="joker-summary text-muted" id="jokerSummary" style="font-size:0.8rem;margin-top:8px">Sem Joker Set</div>
             </div>
             ` : ''}
-            <span class="joker-hint">Base AMRAP: ${formatWeight(base)} kg · Se sofreu na obrigatória, não faça Joker.</span>
+            <span class="joker-hint">Base (3ª série): ${formatWeight(base)} kg · Se sofreu na obrigatória, não faça Joker.</span>
           </div>`;
           }
           if (wc.label === 'Deload') {
@@ -669,6 +739,8 @@
               const pct = pctBtn ? parseInt(pctBtn.dataset.jokerPct, 10) : 5;
               const w = pct === 10 ? j10 : j5;
               parts.push(`${i}ª: +${pct}% (${formatWeight(w)} kg × ${jReps})`);
+              const plateEl = document.getElementById('jokerPlate' + i);
+              if (plateEl) plateEl.textContent = formatPlatesLine(w);
             }
             summaryEl.textContent = parts.join(' · ');
           }
@@ -1139,6 +1211,28 @@
       </div>
 
       <div class="card">
+        <div class="card-title">Barra e anilhas</div>
+        <p class="text-muted mb-12" style="font-size:0.85rem">Usado para mostrar quanto colocar em cada lado.</p>
+        <div class="form-group">
+          <label>Peso da barra</label>
+          <div class="input-suffix">
+            <input type="number" id="cfg-bar" inputmode="decimal" step="0.5" min="1" value="${getEquipment().bar}">
+            <span>kg</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Anilhas disponíveis (por unidade)</label>
+          <div class="plate-checks" id="cfgPlateChecks">
+            ${[25, 20, 15, 10, 5, 2.5, 2, 1.25, 1, 0.5].map(p => {
+              const on = getEquipment().plates.some(x => Math.abs(x - p) < 0.001);
+              return `<label class="plate-check"><input type="checkbox" value="${p}" ${on ? 'checked' : ''}> ${formatWeight(p)} kg</label>`;
+            }).join('')}
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btnSaveEquipment">Salvar equipamento</button>
+      </div>
+
+      <div class="card">
         <div class="card-title">1RM Atual (editar)</div>
         <p class="text-muted mb-16" style="font-size:0.85rem">
           Altere os valores se necessário. O CM (90% do 1RM) é recalculado automaticamente.
@@ -1207,6 +1301,22 @@
         showToast(next === 'beyond' ? 'Beyond 5/3/1 ativo' : '5/3/1 Clássico ativo');
         renderConfig();
       });
+    });
+
+    document.getElementById('btnSaveEquipment')?.addEventListener('click', () => {
+      const barVal = parseFloat(document.getElementById('cfg-bar')?.value);
+      const plates = [];
+      document.querySelectorAll('#cfgPlateChecks input:checked').forEach(cb => {
+        const v = parseFloat(cb.value);
+        if (!isNaN(v)) plates.push(v);
+      });
+      state.equipment = {
+        bar: (!isNaN(barVal) && barVal > 0) ? barVal : 20,
+        plates: plates.length ? plates.sort((a, b) => b - a) : [20, 15, 10, 5, 2.5, 1]
+      };
+      saveState();
+      showToast('Equipamento salvo');
+      renderConfig();
     });
 
     document.getElementById('btnSave1RM')?.addEventListener('click', () => {
@@ -1400,6 +1510,22 @@
       }
       const progRadio = form.querySelector('input[name="setup-program"]:checked');
       state.programMode = progRadio && progRadio.value === 'beyond' ? 'beyond' : 'classic';
+
+      const barInp = document.getElementById('setup-bar');
+      const barVal = parseFloat(barInp?.value);
+      state.equipment = {
+        bar: (!isNaN(barVal) && barVal > 0) ? barVal : 20,
+        plates: []
+      };
+      form.querySelectorAll('input[name="setup-plate"]:checked').forEach(cb => {
+        const v = parseFloat(cb.value);
+        if (!isNaN(v) && v > 0) state.equipment.plates.push(v);
+      });
+      if (!state.equipment.plates.length) {
+        state.equipment.plates = [20, 15, 10, 5, 2.5, 1];
+      }
+      state.equipment.plates.sort((a, b) => b - a);
+
       state.setupComplete = true;
       state.progress = {
         squat: { week: 1, cycle: 1 },

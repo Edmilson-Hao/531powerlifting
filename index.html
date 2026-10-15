@@ -82,6 +82,31 @@
               <span>kg</span>
             </div>
           </div>
+
+          <div class="form-group">
+            <label for="setup-bar">Peso da barra</label>
+            <div class="input-suffix">
+              <input type="number" id="setup-bar" inputmode="decimal" step="0.5" min="1" value="20" required>
+              <span>kg</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Anilhas disponíveis na academia</label>
+            <div class="plate-checks">
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="25"> 25 kg</label>
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="20" checked> 20 kg</label>
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="15" checked> 15 kg</label>
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="10" checked> 10 kg</label>
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="5" checked> 5 kg</label>
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="2.5" checked> 2,5 kg</label>
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="2"> 2 kg</label>
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="1.25"> 1,25 kg</label>
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="1" checked> 1 kg</label>
+              <label class="plate-check"><input type="checkbox" name="setup-plate" value="0.5"> 0,5 kg</label>
+            </div>
+            <p class="text-muted" style="font-size:0.75rem;margin-top:6px">Marque só as que existem. O app mostra quanto colocar em cada lado.</p>
+          </div>
+
           <button type="submit" class="btn btn-primary">Iniciar Programa</button>
         </form>
       </div>
