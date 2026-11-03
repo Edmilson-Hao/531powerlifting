@@ -57,11 +57,12 @@ body {
   pointer-events: none;
 }
 #splash .splash-icon {
-  width: 120px;
-  height: 120px;
-  border-radius: 24px;
-  margin-bottom: 24px;
-  box-shadow: 0 8px 32px rgba(245, 158, 11, 0.3);
+  width: 160px;
+  height: 160px;
+  border-radius: 28px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 32px rgba(255, 120, 0, 0.35);
+  object-fit: contain;
 }
 #splash h1 {
   font-size: 2rem;
