@@ -195,7 +195,9 @@
     // Selected day from agenda strip (null = follow activeLift only)
     selectedScheduleDay: null,
     // History filters
-    histFilter: { lift: 'all', result: 'all', groupByCycle: false }
+    histFilter: { lift: 'all', result: 'all', groupByCycle: false },
+    // Descanso (segundos) — 3 presets editáveis
+    restPresets: [60, 120, 180]
   };
 
   // ========== STATE ==========
@@ -216,6 +218,9 @@
         progress: { ...DEFAULT_STATE.progress, ...(parsed.progress || {}) },
         histFilter: { ...DEFAULT_STATE.histFilter, ...(parsed.histFilter || {}) },
         programMode: parsed.programMode === 'beyond' ? 'beyond' : 'classic',
+        restPresets: Array.isArray(parsed.restPresets) && parsed.restPresets.length >= 3
+          ? parsed.restPresets.slice(0, 3).map(n => Math.max(15, Math.round(Number(n) || 60)))
+          : [60, 120, 180],
         equipment: {
           bar: (parsed.equipment && parsed.equipment.bar > 0) ? parsed.equipment.bar : 20,
           plates: (parsed.equipment && Array.isArray(parsed.equipment.plates) && parsed.equipment.plates.length)
@@ -307,13 +312,78 @@
     return state.progress[liftId] || { week: 1, cycle: 1 };
   }
 
-  function getWeekConfig(week) {
+  function getWeekConfig(week, liftId) {
     const prog = getProgram();
-    return prog.weeks[week] || prog.weeks[1];
+    const base = prog.weeks[week] || prog.weeks[1];
+    // Deadlift: reps reduzidas (Wendler-style DL)
+    // S1 (e S4 Beyond): 3 reps | S2 (e S5): 2 reps | S3 (e S6): 1/1/1
+    if (liftId === 'deadlift' && base && base.label !== 'Deload') {
+      const wave = ((week - 1) % 3) + 1; // 1,2,3,4,5,6 → 1,2,3,1,2,3
+      if (wave === 1) {
+        return {
+          ...base,
+          label: 'Séries de 3 (DL)',
+          jokerReps: 3,
+          sets: [
+            { reps: 3, pct: 0.65, amrap: false },
+            { reps: 3, pct: 0.75, amrap: false },
+            { reps: 3, pct: 0.85, amrap: base.sets[2]?.amrap || false }
+          ]
+        };
+      }
+      if (wave === 2) {
+        return {
+          ...base,
+          label: 'Séries de 2 (DL)',
+          jokerReps: 2,
+          sets: [
+            { reps: 2, pct: 0.70, amrap: false },
+            { reps: 2, pct: 0.80, amrap: false },
+            { reps: 2, pct: 0.90, amrap: base.sets[2]?.amrap || false }
+          ]
+        };
+      }
+      // wave 3: três séries de 1
+      return {
+        ...base,
+        label: 'Triplas de 1 (DL)',
+        jokerReps: 1,
+        sets: [
+          { reps: 1, pct: 0.75, amrap: false },
+          { reps: 1, pct: 0.85, amrap: false },
+          { reps: 1, pct: 0.95, amrap: base.sets[2]?.amrap || false }
+        ]
+      };
+    }
+    return base;
   }
 
-  function getSetsForWeek(week) {
-    return getWeekConfig(week).sets;
+  function getSetsForWeek(week, liftId) {
+    return getWeekConfig(week, liftId).sets;
+  }
+
+  /** Tonelagem de um log entry (kg × reps), inclui jokers se houver */
+  function entryTonnage(entry) {
+    if (!entry) return 0;
+    let total = 0;
+    (entry.sets || []).forEach(s => {
+      const reps = Number(s.reps) || 0;
+      const w = Number(s.weight) || 0;
+      total += w * reps;
+    });
+    if (entry.joker && entry.joker.sets) {
+      entry.joker.sets.forEach(j => {
+        total += (Number(j.weight) || 0) * (Number(j.reps) || 0);
+      });
+    }
+    return total;
+  }
+
+  function plannedTonnage(liftId, week) {
+    const oneRM = state.lifts[liftId]?.oneRM || 0;
+    const cm = calcCM(oneRM);
+    const sets = getSetsForWeek(week, liftId);
+    return sets.reduce((sum, s) => sum + calcWeight(cm, s.pct) * s.reps, 0);
   }
 
   function getMaxWeek() {
@@ -343,6 +413,105 @@
     el.classList.add('show');
     clearTimeout(el._timer);
     el._timer = setTimeout(() => el.classList.remove('show'), duration);
+  }
+
+  // ========== REST TIMER ==========
+  let restTimerInterval = null;
+  let restTimerEndsAt = 0;
+
+  function formatRestClock(totalSec) {
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function playRestAlarm() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = ctx.currentTime;
+      // 3 beeps
+      [0, 0.35, 0.7].forEach((delay, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = 880 - i * 80;
+        g.gain.setValueAtTime(0.0001, now + delay);
+        g.gain.exponentialRampToValueAtTime(0.25, now + delay + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.28);
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start(now + delay);
+        o.stop(now + delay + 0.3);
+      });
+      setTimeout(() => ctx.close(), 1500);
+    } catch (e) {
+      showToast('Descanso finalizado!');
+    }
+  }
+
+  function stopRestTimer() {
+    if (restTimerInterval) {
+      clearInterval(restTimerInterval);
+      restTimerInterval = null;
+    }
+    restTimerEndsAt = 0;
+    const disp = document.getElementById('restTimerDisplay');
+    if (disp) {
+      disp.textContent = '--:--';
+      disp.classList.remove('running', 'done');
+    }
+  }
+
+  function startRestTimer(seconds) {
+    stopRestTimer();
+    const sec = Math.max(5, Math.round(seconds));
+    restTimerEndsAt = Date.now() + sec * 1000;
+    const disp = document.getElementById('restTimerDisplay');
+    if (disp) {
+      disp.classList.add('running');
+      disp.classList.remove('done');
+      disp.textContent = formatRestClock(sec);
+    }
+    restTimerInterval = setInterval(() => {
+      const left = Math.max(0, Math.ceil((restTimerEndsAt - Date.now()) / 1000));
+      const d = document.getElementById('restTimerDisplay');
+      if (d) d.textContent = formatRestClock(left);
+      if (left <= 0) {
+        clearInterval(restTimerInterval);
+        restTimerInterval = null;
+        if (d) {
+          d.textContent = '00:00';
+          d.classList.remove('running');
+          d.classList.add('done');
+        }
+        playRestAlarm();
+        showToast('Descanso finalizado!');
+      }
+    }, 200);
+  }
+
+  function initRestTimerControls(container) {
+    container.querySelectorAll('.rest-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sec = parseInt(btn.dataset.restSec, 10);
+        startRestTimer(sec);
+      });
+    });
+    document.getElementById('btnRestStop')?.addEventListener('click', stopRestTimer);
+    document.getElementById('btnRestEdit')?.addEventListener('click', () => {
+      const cur = state.restPresets || [60, 120, 180];
+      const a = prompt('1º tempo de descanso (segundos):', String(cur[0]));
+      if (a === null) return;
+      const b = prompt('2º tempo de descanso (segundos):', String(cur[1]));
+      if (b === null) return;
+      const c = prompt('3º tempo de descanso (segundos):', String(cur[2]));
+      if (c === null) return;
+      const next = [a, b, c].map(v => Math.max(15, Math.min(600, Math.round(Number(v) || 60))));
+      state.restPresets = next;
+      saveState();
+      showToast('Tempos de descanso atualizados');
+      renderTreino();
+    });
   }
 
   // ========== RENDER ==========
@@ -444,7 +613,7 @@
     const prog = getCurrentProgress(liftId);
     const viewWeek = state.previewWeek || prog.week;
     const isCurrent = viewWeek === prog.week;
-    const sets = getSetsForWeek(viewWeek);
+    const sets = getSetsForWeek(viewWeek, liftId);
     const viewingSBD = state.selectedScheduleDay === 5 && SCHEDULE[5] && SCHEDULE[5].stripLabel === 'SBD';
 
     const today = new Date().getDay(); // 0=Dom … 6=Sáb
@@ -544,7 +713,7 @@
           <div>
             <span class="week-badge">${getProgram().shortName} · Ciclo ${prog.cycle} · S${viewWeek}</span>
             <h2>${lift.name}</h2>
-            <div class="subtitle">1RM: ${formatWeight(oneRM)} kg · CM: ${formatWeight(cm)} kg · ${getWeekConfig(viewWeek).label}</div>
+            <div class="subtitle">1RM: ${formatWeight(oneRM)} kg · CM: ${formatWeight(cm)} kg · ${getWeekConfig(viewWeek, liftId).label}</div>
           </div>
         </div>
 
@@ -569,7 +738,7 @@
           <strong>Aquecimento:</strong> Faça 2–4 séries leves progressivas antes das séries de trabalho (ex: barra, 40%, 50%, 60%).
         </div>
 
-        <div class="card-title">Séries de Trabalho · ${getWeekConfig(viewWeek).label}</div>
+        <div class="card-title">Séries de Trabalho · ${getWeekConfig(viewWeek, liftId).label}</div>
         <ul class="set-list">
           ${sets.map((s, i) => {
             const weight = calcWeight(cm, s.pct);
@@ -589,8 +758,24 @@
           }).join('')}
         </ul>
 
+        <div class="rest-timer-card" id="restTimerCard">
+          <div class="card-title" style="margin-bottom:8px">Descanso</div>
+          <div class="rest-timer-display" id="restTimerDisplay">--:--</div>
+          <div class="rest-timer-presets" id="restTimerPresets">
+            ${(state.restPresets || [60,120,180]).map((sec, i) => {
+              const m = Math.floor(sec / 60);
+              const s = sec % 60;
+              const label = s === 0 ? m + ' min' : m + ':' + String(s).padStart(2,'0');
+              return `<button type="button" class="btn btn-outline btn-sm rest-preset-btn" data-rest-sec="${sec}" data-rest-idx="${i}">${label}</button>`;
+            }).join('')}
+            <button type="button" class="btn btn-outline btn-sm" id="btnRestStop" title="Parar">⏹</button>
+            <button type="button" class="btn btn-outline btn-sm" id="btnRestEdit" title="Editar tempos">✎</button>
+          </div>
+          <p class="text-muted" style="font-size:0.75rem;margin-top:8px">Aviso sonoro ao terminar. Toque em ✎ para ajustar 1º / 2º / 3º preset.</p>
+        </div>
+
         ${(() => {
-          const wc = getWeekConfig(viewWeek);
+          const wc = getWeekConfig(viewWeek, liftId);
           if (wc.joker) {
             const topSet = [...sets].reverse().find(s => s.amrap) || sets[sets.length - 1];
             const base = calcWeight(cm, topSet.pct);
@@ -712,6 +897,9 @@
       });
     });
 
+    // ----- Rest timer -----
+    initRestTimerControls(container);
+
     // Joker picker interactions
     const jokerPanel = document.getElementById('jokerPanel');
     if (jokerPanel) {
@@ -822,7 +1010,7 @@
     const prog = getCurrentProgress(liftId);
     const oneRM = state.lifts[liftId].oneRM;
     const cm = calcCM(oneRM);
-    const sets = getSetsForWeek(prog.week);
+    const sets = getSetsForWeek(prog.week, liftId);
     const weights = sets.map(s => calcWeight(cm, s.pct));
     const mode = state.programMode || 'classic';
     const maxW = getMaxWeek();
@@ -897,7 +1085,44 @@
   // ----- PROGRESSO TAB -----
   function renderProgresso() {
     const container = document.getElementById('panel-progresso');
+    const log = state.log || [];
+    const totalTon = log.reduce((s, e) => s + entryTonnage(e), 0);
+    const tonByLift = {};
+    MAIN_LIFTS.forEach(l => { tonByLift[l.id] = 0; });
+    log.forEach(e => {
+      if (tonByLift[e.lift] !== undefined) tonByLift[e.lift] += entryTonnage(e);
+    });
+    // última sessão por lift
+    const lastByLift = {};
+    log.forEach(e => {
+      if (!lastByLift[e.lift]) lastByLift[e.lift] = e;
+    });
+
     container.innerHTML = `
+      <div class="card">
+        <div class="card-title">Tonelagem</div>
+        <div class="tonnage-total">
+          <div class="tonnage-value">${formatWeight(Math.round(totalTon))} kg</div>
+          <div class="text-muted" style="font-size:0.8rem">volume total registrado (carga × reps + jokers)</div>
+        </div>
+        <div class="tonnage-grid mt-12">
+          ${MAIN_LIFTS.map(l => {
+            const planned = plannedTonnage(l.id, getCurrentProgress(l.id).week);
+            const last = lastByLift[l.id];
+            const lastTon = last ? entryTonnage(last) : 0;
+            return `
+              <div class="tonnage-item">
+                <div class="fw-bold">${l.short}</div>
+                <div class="text-accent" style="font-size:1.05rem">${formatWeight(Math.round(tonByLift[l.id] || 0))} kg</div>
+                <div class="text-muted" style="font-size:0.72rem">
+                  última: ${last ? formatWeight(Math.round(lastTon)) + ' kg' : '—'}
+                  · planejado S${getCurrentProgress(l.id).week}: ~${formatWeight(Math.round(planned))} kg
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title">Resumo dos Levantamentos</div>
         ${MAIN_LIFTS.map(l => {
@@ -932,14 +1157,15 @@
           const oneRM = state.lifts[l.id]?.oneRM || 0;
           const cm = calcCM(oneRM);
           const prog = getCurrentProgress(l.id);
-          const sets = getSetsForWeek(prog.week);
+          const sets = getSetsForWeek(prog.week, l.id);
+          const ton = plannedTonnage(l.id, prog.week);
           return `
             <div class="mb-16">
-              <div class="fw-bold mb-8">${l.short} · S${prog.week}</div>
+              <div class="fw-bold mb-8">${l.short} · S${prog.week} · ~${formatWeight(Math.round(ton))} kg ton.</div>
               <div class="flex gap-8" style="flex-wrap:wrap">
                 ${sets.map((s, i) => `
                   <div style="background:var(--bg);padding:8px 12px;border-radius:8px;font-size:0.85rem">
-                    <span class="text-muted">${s.amrap ? 'AMRAP' : s.reps + '×'}</span>
+                    <span class="text-muted">${s.amrap ? 'AMRAP ' + s.reps + '+' : s.reps + '×'}</span>
                     <span class="fw-bold text-accent">${formatWeight(calcWeight(cm, s.pct))} kg</span>
                   </div>
                 `).join('')}
@@ -1182,6 +1408,7 @@
         </div>
         <div class="text-muted" style="font-size:0.75rem;margin-top:2px">
           ${(entry.sets || []).map(s => `${formatWeight(s.weight)}kg × ${s.amrap ? 'AMRAP' : s.reps}`).join(' · ')}
+          · ton. ${formatWeight(Math.round(entryTonnage(entry)))} kg
         </div>
         ${entry.joker && entry.joker.sets && entry.joker.sets.length ? `
         <div class="log-joker">
