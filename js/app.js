@@ -73,8 +73,8 @@
       shortName: '5/3/1',
       maxWeek: 4,
       weeks: {
-        1: { sets: SETS_5, label: 'Séries de 5', joker: true, jokerReps: 5 },
-        2: { sets: SETS_3, label: 'Séries de 3', joker: true, jokerReps: 3 },
+        1: { sets: SETS_5, label: 'Séries de 5', joker: true, jokerReps: 1 },
+        2: { sets: SETS_3, label: 'Séries de 3', joker: true, jokerReps: 1 },
         3: { sets: SETS_531_CLASSIC, label: '5/3/1', joker: true, jokerReps: 1 },
         4: { sets: SETS_DELOAD_CLASSIC, label: 'Deload', joker: false }
       }
@@ -85,11 +85,11 @@
       shortName: 'Beyond',
       maxWeek: 7,
       weeks: {
-        1: { sets: SETS_5_BEYOND, label: 'Séries de 5', joker: true, jokerReps: 5 },
-        2: { sets: SETS_3_BEYOND, label: 'Séries de 3', joker: true, jokerReps: 3 },
+        1: { sets: SETS_5_BEYOND, label: 'Séries de 5', joker: true, jokerReps: 1 },
+        2: { sets: SETS_3_BEYOND, label: 'Séries de 3', joker: true, jokerReps: 1 },
         3: { sets: SETS_531_BEYOND, label: '5/3/1', joker: true, jokerReps: 1 },
-        4: { sets: SETS_5_BEYOND, label: 'Séries de 5', joker: true, jokerReps: 5 },
-        5: { sets: SETS_3_BEYOND, label: 'Séries de 3', joker: true, jokerReps: 3 },
+        4: { sets: SETS_5_BEYOND, label: 'Séries de 5', joker: true, jokerReps: 1 },
+        5: { sets: SETS_3_BEYOND, label: 'Séries de 3', joker: true, jokerReps: 1 },
         6: { sets: SETS_531_BEYOND, label: '5/3/1', joker: true, jokerReps: 1 },
         7: { sets: SETS_DELOAD_BEYOND, label: 'Deload', joker: false }
       }
@@ -323,7 +323,7 @@
         return {
           ...base,
           label: 'Séries de 3 (DL)',
-          jokerReps: 3,
+          jokerReps: 1,
           sets: [
             { reps: 3, pct: 0.65, amrap: false },
             { reps: 3, pct: 0.75, amrap: false },
@@ -335,7 +335,7 @@
         return {
           ...base,
           label: 'Séries de 2 (DL)',
-          jokerReps: 2,
+          jokerReps: 1,
           sets: [
             { reps: 2, pct: 0.70, amrap: false },
             { reps: 2, pct: 0.80, amrap: false },
@@ -373,7 +373,8 @@
     });
     if (entry.joker && entry.joker.sets) {
       entry.joker.sets.forEach(j => {
-        total += (Number(j.weight) || 0) * (Number(j.reps) || 0);
+        const r = Number(j.reps);
+        total += (Number(j.weight) || 0) * (r > 0 ? r : 1);
       });
     }
     return total;
@@ -783,8 +784,8 @@
             const joker10 = Math.round((base * 1.10) / 2.5) * 2.5;
             return `
           <div class="joker-note" id="jokerPanel"
-               data-base="${base}" data-j5="${joker5}" data-j10="${joker10}" data-reps="${wc.jokerReps}">
-            <strong>Joker Set (opcional):</strong> Se a 3ª série saiu rápida e limpa, registre o Joker.
+               data-base="${base}" data-j5="${joker5}" data-j10="${joker10}" data-reps="1">
+            <strong>Joker Set (opcional · 1 rep):</strong> Se a 3ª série saiu rápida e limpa, registre o Joker.
             <div class="joker-loads">
               <span class="joker-load">+5% → <strong>${formatWeight(joker5)} kg</strong><small class="plates-hint">${formatPlatesLine(joker5)}</small></span>
               <span class="joker-load">+10% → <strong>${formatWeight(joker10)} kg</strong><small class="plates-hint">${formatPlatesLine(joker10)}</small></span>
@@ -907,7 +908,7 @@
       const summaryEl = document.getElementById('jokerSummary');
       const j5 = parseFloat(jokerPanel.dataset.j5);
       const j10 = parseFloat(jokerPanel.dataset.j10);
-      const jReps = parseInt(jokerPanel.dataset.reps, 10) || 5;
+      const jReps = 1; // sempre 1 rep
 
       function updateJokerUI() {
         const countBtn = jokerPanel.querySelector('[data-joker-count].active');
@@ -961,7 +962,6 @@
       if (!count) return null;
       const j5 = parseFloat(panel.dataset.j5);
       const j10 = parseFloat(panel.dataset.j10);
-      const jReps = parseInt(panel.dataset.reps, 10) || 5;
       const jokerSets = [];
       for (let i = 1; i <= count; i++) {
         const pctBtn = panel.querySelector(`[data-joker-pct].active[data-slot="${i}"]`);
@@ -970,7 +970,7 @@
           order: i,
           boostPct: pct,
           weight: pct === 10 ? j10 : j5,
-          reps: jReps
+          reps: 1 // Joker sempre 1 rep
         });
       }
       return { count, sets: jokerSets };
@@ -1412,7 +1412,8 @@
         </div>
         ${entry.joker && entry.joker.sets && entry.joker.sets.length ? `
         <div class="log-joker">
-          Joker: ${entry.joker.sets.map(j => `+${j.boostPct}% ${formatWeight(j.weight)}kg×${j.reps}`).join(' → ')}
+          Joker: ${entry.joker.sets.map(j => `+${j.boostPct}% ${formatWeight(j.weight)}kg×${j.reps || 1}`).join(' → ')}
+          · +${formatWeight(Math.round(entry.joker.sets.reduce((s, j) => s + (Number(j.weight)||0)*(Number(j.reps)||1), 0)))} kg ton.
         </div>` : ''}
       </div>
     `;
