@@ -204,6 +204,15 @@
   let state = loadState();
   let deferredPrompt = null;
 
+  // Corrige jokers antigas (5/3 reps → 1) sem perder histórico
+  (function runJokerMigration() {
+    const n = migrateJokerRepsToOne(state);
+    if (n > 0) {
+      saveState();
+      console.info('[5/3/1] Migração joker: ' + n + ' série(s) ajustada(s) para 1 rep.');
+    }
+  })();
+
   // ========== STORAGE ==========
   function loadState() {
     try {
@@ -241,6 +250,32 @@
       console.error('Erro ao salvar:', e);
       showToast('Erro ao salvar dados');
     }
+  }
+
+  /**
+   * Migração: jokers antigas gravavam 3 ou 5 reps; na prática sempre foi 1 rep.
+   * Corrige apenas entry.joker.sets[].reps — não apaga treinos nem outros campos.
+   * Retorna quantas séries de joker foram ajustadas.
+   */
+  function migrateJokerRepsToOne(data) {
+    let fixed = 0;
+    if (!data || !Array.isArray(data.log)) return 0;
+    data.log.forEach(entry => {
+      if (!entry || !entry.joker || !Array.isArray(entry.joker.sets)) return;
+      entry.joker.sets.forEach(j => {
+        if (!j) return;
+        const r = Number(j.reps);
+        if (r !== 1) {
+          j.reps = 1;
+          fixed++;
+        }
+      });
+      // garante count coerente
+      if (entry.joker.sets.length) {
+        entry.joker.count = entry.joker.sets.length;
+      }
+    });
+    return fixed;
   }
 
   // ========== HELPERS ==========
@@ -1439,6 +1474,15 @@
       </div>
 
       <div class="card">
+        <div class="card-title">Manutenção do histórico</div>
+        <p class="text-muted mb-12" style="font-size:0.85rem">
+          Corrige jokers antigas que aparecem com 3 ou 5 reps para <strong>1 rep</strong> (como você treinou).
+          Não apaga treinos — só ajusta as reps das jokers e a tonelagem recalcula sozinha.
+        </p>
+        <button class="btn btn-outline" id="btnFixJokers">Corrigir jokers antigas (1 rep)</button>
+      </div>
+
+      <div class="card">
         <div class="card-title">Barra e anilhas</div>
         <p class="text-muted mb-12" style="font-size:0.85rem">Usado para mostrar quanto colocar em cada lado.</p>
         <div class="form-group">
@@ -1529,6 +1573,17 @@
         showToast(next === 'beyond' ? 'Beyond 5/3/1 ativo' : '5/3/1 Clássico ativo');
         renderConfig();
       });
+    });
+
+    document.getElementById('btnFixJokers')?.addEventListener('click', () => {
+      const n = migrateJokerRepsToOne(state);
+      saveState();
+      if (n > 0) {
+        showToast(n + ' joker(s) corrigida(s) para 1 rep');
+      } else {
+        showToast('Nenhuma joker precisava de correção');
+      }
+      renderConfig();
     });
 
     document.getElementById('btnSaveEquipment')?.addEventListener('click', () => {
