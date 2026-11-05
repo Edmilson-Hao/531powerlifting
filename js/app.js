@@ -204,12 +204,12 @@
   let state = loadState();
   let deferredPrompt = null;
 
-  // Corrige jokers antigas (5/3 reps → 1) sem perder histórico
-  (function runJokerMigration() {
-    const n = migrateJokerRepsToOne(state);
-    if (n > 0) {
+  // Corrige histórico antigo (jokers 1 rep + deadlift reps reais) sem perder treinos
+  (function runHistoryMigrations() {
+    const r = migrateHistoryReps(state);
+    if (r.jokers > 0 || r.deadlift > 0) {
       saveState();
-      console.info('[5/3/1] Migração joker: ' + n + ' série(s) ajustada(s) para 1 rep.');
+      console.info('[5/3/1] Migração histórico: jokers=' + r.jokers + ', deadlift séries=' + r.deadlift);
     }
   })();
 
@@ -253,9 +253,13 @@
   }
 
   /**
-   * Migração: jokers antigas gravavam 3 ou 5 reps; na prática sempre foi 1 rep.
-   * Corrige apenas entry.joker.sets[].reps — não apaga treinos nem outros campos.
-   * Retorna quantas séries de joker foram ajustadas.
+   * Migrações de histórico (não apagam treinos; só ajustam reps).
+   * - Jokers: sempre 1 rep
+   * - Deadlift séries principais (como você treinou desde o início):
+   *     semana 1 e 4 → 3 reps em todas
+   *     semana 2 e 5 → 2 reps em todas
+   *     semana 3 e 6 → 1 rep em todas
+   *   (deload / outras semanas não alteradas)
    */
   function migrateJokerRepsToOne(data) {
     let fixed = 0;
@@ -270,12 +274,57 @@
           fixed++;
         }
       });
-      // garante count coerente
       if (entry.joker.sets.length) {
         entry.joker.count = entry.joker.sets.length;
       }
     });
     return fixed;
+  }
+
+  function deadliftTargetMainReps(week) {
+    const w = Number(week) || 0;
+    // Beyond: 4→1, 5→2, 6→3
+    const wave = ((w - 1) % 3) + 1;
+    if (w === 7) return null; // deload
+    if (wave === 1) return 3;
+    if (wave === 2) return 2;
+    if (wave === 3) return 1;
+    return null;
+  }
+
+  function isDeadliftEntry(entry) {
+    if (!entry) return false;
+    if (entry.lift === 'deadlift') return true;
+    const name = (entry.liftName || '').toLowerCase();
+    return name.includes('deadlift') || name.includes('terra');
+  }
+
+  function migrateDeadliftMainReps(data) {
+    let fixed = 0;
+    if (!data || !Array.isArray(data.log)) return 0;
+    data.log.forEach(entry => {
+      if (!isDeadliftEntry(entry) || !Array.isArray(entry.sets)) return;
+      const target = deadliftTargetMainReps(entry.week);
+      if (target == null) return;
+      entry.sets.forEach(s => {
+        if (!s) return;
+        if (Number(s.reps) !== target) {
+          s.reps = target;
+          // histórico antigo às vezes marcava AMRAP; nas séries fixas do DL não era
+          if (s.amrap && target !== 1) s.amrap = false;
+          fixed++;
+        }
+      });
+    });
+    return fixed;
+  }
+
+  /** Roda todas as correções de histórico; retorna { jokers, deadlift } */
+  function migrateHistoryReps(data) {
+    return {
+      jokers: migrateJokerRepsToOne(data),
+      deadlift: migrateDeadliftMainReps(data)
+    };
   }
 
   // ========== HELPERS ==========
@@ -1476,10 +1525,12 @@
       <div class="card">
         <div class="card-title">Manutenção do histórico</div>
         <p class="text-muted mb-12" style="font-size:0.85rem">
-          Corrige jokers antigas que aparecem com 3 ou 5 reps para <strong>1 rep</strong> (como você treinou).
-          Não apaga treinos — só ajusta as reps das jokers e a tonelagem recalcula sozinha.
+          Ajusta o log antigo sem apagar treinos:
+          <br>• Jokers → sempre <strong>1 rep</strong>
+          <br>• Deadlift S1/S4 → <strong>3</strong> reps · S2/S5 → <strong>2</strong> · S3/S6 → <strong>1</strong>
+          <br>A tonelagem recalcula sozinha.
         </p>
-        <button class="btn btn-outline" id="btnFixJokers">Corrigir jokers antigas (1 rep)</button>
+        <button class="btn btn-outline" id="btnFixJokers">Corrigir histórico (DL + jokers)</button>
       </div>
 
       <div class="card">
@@ -1576,12 +1627,13 @@
     });
 
     document.getElementById('btnFixJokers')?.addEventListener('click', () => {
-      const n = migrateJokerRepsToOne(state);
+      const r = migrateHistoryReps(state);
       saveState();
-      if (n > 0) {
-        showToast(n + ' joker(s) corrigida(s) para 1 rep');
+      const total = r.jokers + r.deadlift;
+      if (total > 0) {
+        showToast('Corrigido: ' + r.deadlift + ' série(s) DL + ' + r.jokers + ' joker(s)');
       } else {
-        showToast('Nenhuma joker precisava de correção');
+        showToast('Histórico já estava correto');
       }
       renderConfig();
     });

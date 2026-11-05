@@ -1,4 +1,4 @@
-const CACHE_NAME = '531-powerlifting-v22';
+const CACHE_NAME = '531-powerlifting-v23';
 const ASSETS = [
   './',
   './index.html',
